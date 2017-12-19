@@ -8,6 +8,7 @@
             'Resets' => 'Int',
             'CompletedRuns' => 'Int',
             'IsComplete' => 'Boolean',
+            'LevelledDex' => 'Int'
         );
 
         private static $has_one = array(
@@ -32,7 +33,8 @@
             'PB' => 0,
             'Resets' => 0,
             'CompletedRuns' => 0,
-            'IsComplete' => false
+            'IsComplete' => false,
+            'LevelledDex' => 0
         );
 
         private static $summary_fields = array(
@@ -106,6 +108,17 @@
             }
 
             return $Best;
+        }
+
+        public function getHitsTotal() {
+            $HitsTotal = 0;
+            $Splits = $this->Splits();
+
+            foreach($Splits as $Split) {
+                $HitsTotal += $Split->Hits;
+            }
+
+            return $HitsTotal;
         }
 
         public function getCharacters() {

@@ -9,7 +9,9 @@
             'Best' => 'Int',
             'Sort' => 'Int',
             'Curr' => 'Boolean',
-            'RunKiller' => 'Int'
+            'RunKiller' => 'Int',
+            'Completed' => 'Boolean',
+            'Dexterity' => 'Int'
         );
 
         private static $has_one = array(
@@ -31,7 +33,9 @@
         private static $defaults = array(
             'Title' => 'Title',
             'Hits' => 0,
-            'RunKiller' => 0
+            'RunKiller' => 0,
+            'Completed' => false,
+            'Dexterity' => 0
         );
 
         private static $default_sort = array(
@@ -54,7 +58,8 @@
         public function getCMSFields() {
 
             $fields = new FieldList(
-                new TextField('Title')
+                new TextField('Title'),
+                new NumericField('Dexterity')
             );
 
             return $fields;

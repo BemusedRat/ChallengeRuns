@@ -48,9 +48,10 @@
 
         public function init() {
             parent::init();
-            Requirements::javascript("framework/thirdparty/jquery/jquery.js");
-            Requirements::javascript("challengeruns/js/challengejs.js");
-
+            if(!Member::currentUser()) {
+                Requirements::javascript("framework/thirdparty/jquery/jquery.js");
+                Requirements::javascript("challengeruns/js/challengejs.js");
+            }
         }
 
         private static $allowed_actions = array(
@@ -62,11 +63,15 @@
         	'previousSplit',
         	'resetRun',
         	'saveSplits',
-            'resetWholeRoute'
+            'resetWholeRoute',
+            'currentSplit'
         );
 
         public function routes(SS_HTTPRequest $request) {
         	$Route = ChallengeRoute::get()->byID($request->param('ID'));
+            $CurrentSplit = $Route->getCurrentSplit();
+            $Name = $request->param('OtherID');
+            $Info = array();
 
         	if(!$Route) {
         		return $this->httpError(404, "That run doesn't exist.");
@@ -78,11 +83,26 @@
         		$this->setFirstSplitToCurrent($Splits);
         	}
 
-        	return array(
-        		'ChallengeRoute' => $Route,
-        		'Title' => $Route->Title,
-                'SumOfBest' => $Route->getSumOfBest()
-        	);
+            // Show only the current split and simple route info
+            if($Name == 'CurrentSplit') {
+                $Info['SimpleView'] = true;
+            } else {
+                $Info['SimpleView'] = false;
+            }
+
+    		$Info['ChallengeRoute'] = $Route;
+            $Info['CurrentSplit'] = $CurrentSplit;
+    		$Info['Title'] = $Route->Title;
+            $Info['SplitTitle'] = $CurrentSplit->Title;
+            $Info['SumOfBest'] = $Route->getSumOfBest();
+            $Info['HitsTotal'] = $Route->getHitsTotal();
+
+            if(Director::is_ajax()) {
+                    return $this->renderWith('RoutesPage_routes', $Info);
+            }
+
+            return $Info;
+
         }
 
         //
@@ -154,8 +174,13 @@
 
         // Decide whether to move to next split or complete run
         public function makeSplit() {
-            if($this->isLastSplit()) {
-                $Route = $this->getCurrentRoute();
+            $Route = $this->getCurrentRoute();
+            $CurrentSplit = $this->getCurrentSplit();
+            $CurrentSplit->Completed = true;
+            $CurrentSplit->write();
+            if($Route->IsComplete == true) {
+                return $this->redirectBack();
+            } elseif($this->isLastSplit()) {
                 $Route->CompletedRuns += 1;
                 $Route->IsComplete = true;
                 $Route->write();
@@ -232,6 +257,7 @@
                 $Split->Curr = 0;
                 $Split->PB = 0;
                 $Split->Best = 0;
+                $Split->Completed = false;
                 $Split->write();
             }
 
@@ -248,42 +274,51 @@
             $Splits = $this->getSplits();
             $Route = $this->getCurrentRoute();
             $RouteID = $Route->ID;
+            $RouteDexterity = $Route->LevelledDex;
             $PB = $this->getPB();
             $TotalHits = 0;
 
             // Check and update PB and Best values
             foreach($Splits as $Split) {
-                $Hits = $Split->Hits;
-                $Best = $Split->Best;
-                $TotalHits += $Hits;
-                $isPB = $this->isPB();
+                if($Split->Completed == true) {
+                    $Hits = $Split->Hits;
+                    $Best = $Split->Best;
+                    $Dexterity = $Split->Dexterity;
+                    $RouteDexterity += $Dexterity;
+                    $TotalHits += $Hits;
+                    $isPB = $this->isPB();
 
-                if($Hits < $Best || $PB == 0) {
-                    $Split->Best = $Hits;
+                    if($Hits < $Best || $PB == 0) {
+                        $Split->Best = $Hits;
+                    }
+
+                    if($isPB || $PB == 0) {
+                        $Split->PB = $Hits;
+                    }
+
+                    // Create and populate SavedSplit for this current split
+                    $SavedSplit = SavedSplit::create();
+                    $SavedSplit->ParentID = $Split->ID;
+                    $SavedSplit->Title = $Split->Title;
+                    $SavedSplit->Hits = $Split->Hits;
+                    $SavedSplit->PB = $Split->PB;
+                    $SavedSplit->Best = $Split->Best;
+                    $SavedSplit->Dexterity = $Split->Dexterity;
+                    $SavedSplit->Sort = $Split->Sort;
+                    $SavedSplit->write();
+
+                    $Split->Completed = false;
+                    $Split->write();
                 }
-
-                if($isPB || $PB == 0) {
-                    $Split->PB = $Hits;
-                }
-
-                // Create and populate SavedSplit for this current split
-                $SavedSplit = SavedSplit::create();
-                $SavedSplit->ParentID = $Split->ID;
-                $SavedSplit->Title = $Split->Title;
-                $SavedSplit->Hits = $Split->Hits;
-                $SavedSplit->PB = $Split->PB;
-                $SavedSplit->Best = $Split->Best;
-                $SavedSplit->Sort = $Split->Sort;
-                $SavedSplit->write();
-
-                $Split->write();
-
             }
 
             if($isPB || $PB == 0) {
                 $Route->PB = $TotalHits;
                 $Route->write();
             }
+
+            $Route->LevelledDex = $RouteDexterity;
+            $Route->write();
 
             $this->resetRun();
 
@@ -320,5 +355,6 @@
 
             return false;
         }
+
 
     }
